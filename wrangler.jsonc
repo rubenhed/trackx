@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trackx",
+  "compatibility_date": "2025-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@tanstack/react-start/server-entry",
+  "ai": {
+    "binding": "AI",
+  },
+  "d1_databases": [
+    {
+      "binding": "trackx_db",
+      "database_name": "trackx-db",
+      "database_id": "9c166a5a-d073-4aa7-addb-da9d5b7e2893",
+      "migrations_dir": "drizzle/migrations",
+      "remote": false,
+    },
+  ],
+}

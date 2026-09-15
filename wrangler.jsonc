@@ -6,6 +6,7 @@
   "main": "@tanstack/react-start/server-entry",
   "ai": {
     "binding": "AI",
+    "remote": true,
   },
   "d1_databases": [
     {

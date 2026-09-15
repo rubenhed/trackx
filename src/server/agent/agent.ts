@@ -2,10 +2,6 @@ import { generateText, stepCountIs } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { env } from "cloudflare:workers";
 import { buildTrackerTools } from "./tools";
-import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeaders } from "@tanstack/react-start/server";
-
-import { auth } from "../../lib/auth";
 
 const workersai = createWorkersAI({ binding: env.AI });
 
@@ -25,14 +21,3 @@ export async function runAgent(userId: string, userMessage: string) {
 
   return result.text;
 }
-
-export const runAgentServerFn = createServerFn({ method: "POST" })
-  .validator((data: { message: string }) => data)
-  .handler(async ({ data }) => {
-    const session = await auth.api.getSession({
-      headers: getRequestHeaders(),
-    });
-    if (!session?.user) throw new Error("Unauthorized");
-
-    return runAgent(session.user.id, data.message);
-  });

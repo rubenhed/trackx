@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { createTracker } from "../trackers";
+import { createTracker } from "../trackers/trackers";
 
 export function buildTrackerTools(userId: string) {
   return {

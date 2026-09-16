@@ -14,13 +14,15 @@ If you cannot perform an action with the available tools, say so clearly.
 After completing an action, briefly explain what you did.
 `;
 
+const LLM_MODEL = "@cf/zai-org/glm-4.7-flash";
+
 const workersai = createWorkersAI({ binding: env.AI });
 
 export async function runAgent(userId: string, userMessage: string) {
   const tools = buildTrackerTools(userId);
 
   const result = await generateText({
-    model: workersai("@cf/zai-org/glm-4.7-flash"),
+    model: workersai(LLM_MODEL),
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userMessage }],
     tools,

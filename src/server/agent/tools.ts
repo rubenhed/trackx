@@ -13,7 +13,7 @@ export function buildTrackerTools(userId: string) {
           .max(100)
           .describe("The name of the tracker to create"),
       }),
-      execute: async ({ name }) => createTracker(userId, name)
+      execute: async ({ name }) => createTracker(userId, name, [])
     }),
   };
 }

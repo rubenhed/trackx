@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createEntry } from "./createEntry";
-import { createTracker } from "./createTracker";
+import { createEntry } from "./createEntry/createEntry";
+import { createEntrySchema } from "./createEntry/schema";
+import { createTracker } from "./createTracker/createTracker";
+import { createTrackerSchema } from "./createTracker/schema";
 import { getCurrentUser } from "@/lib/server-auth";
 
 export const createTrackerServerFn = createServerFn({ method: "POST" })
-  .validator((data: { name: string, fields: string[] }) => data)
+  .validator((data: unknown) => createTrackerSchema.parse(data))
   .handler(async ({ data }) => {
     const user = await getCurrentUser();
 
@@ -12,20 +14,14 @@ export const createTrackerServerFn = createServerFn({ method: "POST" })
   });
 
 export const createEntryServerFn = createServerFn({ method: "POST" })
-  .validator(
-    (data: {
-      trackerId: string;
-      loggedAt: string | Date;
-      values: { fieldId: string; value: string }[];
-    }) => data,
-  )
+  .validator((data: unknown) => createEntrySchema.parse(data))
   .handler(async ({ data }) => {
     const user = await getCurrentUser();
 
     return createEntry(
       user.id,
       data.trackerId,
-      data.loggedAt instanceof Date ? data.loggedAt : new Date(data.loggedAt),
+      data.loggedAt ?? new Date(),
       data.values,
     );
   });

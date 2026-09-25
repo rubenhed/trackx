@@ -1,12 +1,10 @@
 import { db } from "@/db";
 import { entries, entryValues } from "@/db/schema";
 import { v7 as uuidv7 } from "uuid";
+import type { EntryValueInput } from "./schema";
 
-export type EntryValueInput = {
-  fieldId: string;
-  value: string;
-};
-
+// userId must come from the session — never from client-supplied input.
+// trackerId/fieldIds are untrusted; ownership is enforced by composite FKs at insert time.
 export async function createEntry(
   userId: string,
   trackerId: string,
@@ -38,11 +36,11 @@ export async function createEntry(
     throw new Error("Tracker not found, unauthorized, or invalid field");
   }
 
-  const [entry] = results[0];
+  const [entry] = results[0] ?? [];
   if (!entry) throw new Error("Failed to create entry");
 
   return {
     entry,
-    values: valueRows.length ? results[1] : [],
+    values: valueRows.length ? (results[1] ?? []) : [],
   };
 }

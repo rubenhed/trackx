@@ -2,15 +2,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { auth } from "../lib/auth";
-import { createTrackerServerFn } from "../server/trackers/server-fn";
+import {
+  createEntryServerFn,
+  createTrackerServerFn,
+} from "../server/trackers/server-fn";
 import { runAgentServerFn } from "../server/agent/server-fn";
 
 const TEST_EMAIL = "test@trackx.dev";
 const TEST_PASSWORD = "test-password-123";
-
-// --- server fns using your auth instance directly ---
 
 const getSessionServerFn = createServerFn({ method: "GET" }).handler(
   async () => {
@@ -27,22 +28,13 @@ const loginServerFn = createServerFn({ method: "POST" }).handler(async () => {
       body: { email: TEST_EMAIL, password: TEST_PASSWORD },
       headers,
     });
-
     return { user: result.user, message: "Logged in as test user" };
   } catch {
     const result = await auth.api.signUpEmail({
-      body: {
-        email: TEST_EMAIL,
-        password: TEST_PASSWORD,
-        name: "Test User",
-      },
+      body: { email: TEST_EMAIL, password: TEST_PASSWORD, name: "Test User" },
       headers,
     });
-
-    return {
-      user: result.user,
-      message: "Signed up + logged in as test user",
-    };
+    return { user: result.user, message: "Signed up + logged in as test user" };
   }
 });
 
@@ -51,19 +43,34 @@ const logoutServerFn = createServerFn({ method: "POST" }).handler(async () => {
   return null;
 });
 
-// --- route ---
-
 export const Route = createFileRoute("/test")({
   component: TestPage,
 });
 
+type LastTracker = {
+  id: string;
+  name: string;
+  fields: { id: string; name: string }[];
+};
+
 function TestPage() {
   const [user, setUser] = useState<{ email: string } | null>(null);
-  const [name, setName] = useState("");
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
+  const [trackerName, setTrackerName] = useState("My Tracker");
+  const [fieldsInput, setFieldsInput] = useState("mood, energy");
+  const [lastTracker, setLastTracker] = useState<LastTracker | null>(null);
+
+  const [entryTrackerId, setEntryTrackerId] = useState("");
+  const [entryFieldId, setEntryFieldId] = useState("");
+  const [entryValue, setEntryValue] = useState("good");
+
+  const [agentMessage, setAgentMessage] = useState("");
+
   const append = (msg: string) => setLog((l) => [...l, msg]);
+  const errMsg = (err: unknown) =>
+    err instanceof Error ? err.message : String(err);
 
   const refreshSession = useCallback(async () => {
     const sessionUser = await getSessionServerFn();
@@ -76,15 +83,12 @@ function TestPage() {
 
   async function handleLogin() {
     setBusy(true);
-
     try {
       const { user, message } = await loginServerFn();
       setUser(user);
       append(message);
     } catch (err) {
-      append(
-        `Login failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      append(`Login failed: ${errMsg(err)}`);
     } finally {
       setBusy(false);
     }
@@ -92,7 +96,6 @@ function TestPage() {
 
   async function handleLogout() {
     setBusy(true);
-
     try {
       await logoutServerFn();
       setUser(null);
@@ -102,42 +105,124 @@ function TestPage() {
     }
   }
 
-  async function handleDirectAdd() {
-    if (!name.trim()) return;
+  function parseFieldNames(): string[] {
+    return fieldsInput
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
 
+  async function handleDirectTracker() {
+    if (!trackerName.trim()) return;
     setBusy(true);
-
     try {
-      const tracker = await createTrackerServerFn({ data: { name } });
-      append(`Direct: created tracker "${tracker.name}" (id ${tracker.id})`);
-    } catch (err) {
+      const fieldNames = parseFieldNames();
+      const result = await createTrackerServerFn({
+        data: { name: trackerName.trim(), fields: fieldNames },
+      });
+      setLastTracker({
+        id: result.tracker.id,
+        name: result.tracker.name,
+        fields: result.fields.map((f) => ({ id: f.id, name: f.name })),
+      });
+      setEntryTrackerId(String(result.tracker.id));
+      if (result.fields[0]) setEntryFieldId(String(result.fields[0].id));
       append(
-        `Direct add failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Direct tracker: "${result.tracker.name}" (id ${result.tracker.id}) with ${result.fields.length} fields`,
       );
+    } catch (err) {
+      append(`Direct tracker failed: ${errMsg(err)}`);
     } finally {
       setBusy(false);
     }
   }
 
-  async function handleAgentAdd() {
-    if (!name.trim()) return;
-
+  async function handleAgentTracker() {
+    if (!trackerName.trim()) return;
     setBusy(true);
+    try {
+      const fieldNames = parseFieldNames();
+      const reply = await runAgentServerFn({
+        data: {
+          message: `Create a tracker called "${trackerName.trim()}"${
+            fieldNames.length ? ` with fields: ${fieldNames.join(", ")}` : ""
+          }`,
+        },
+      });
+      append(`Agent tracker: ${reply}`);
+    } catch (err) {
+      append(`Agent tracker failed: ${errMsg(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
+  async function handleDirectEntry() {
+    const trackerId = entryTrackerId.trim();
+    const fieldId = entryFieldId.trim();
+    if (!trackerId || !fieldId || !entryValue.trim()) return;
+    setBusy(true);
+    try {
+      const result = await createEntryServerFn({
+        data: {
+          trackerId,
+          loggedAt: new Date().toISOString(),
+          values: [{ fieldId, value: entryValue.trim() }],
+        },
+      });
+      append(
+        `Direct entry: id ${result.entry.id} for tracker ${trackerId} (${result.values.length} values)`,
+      );
+    } catch (err) {
+      append(`Direct entry failed: ${errMsg(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAgentEntry() {
+    const trackerId = entryTrackerId.trim();
+    const fieldId = entryFieldId.trim();
+    if (!trackerId || !entryValue.trim()) return;
+    setBusy(true);
     try {
       const reply = await runAgentServerFn({
-        data: { message: `Create a tracker called "${name}"` },
+        data: {
+          message: `Log an entry for tracker ${trackerId} with field ${fieldId} = "${entryValue.trim()}"`,
+        },
       });
-
-      append(`Agent: ${reply}`);
+      append(`Agent entry: ${reply}`);
     } catch (err) {
-      append(
-        `Agent add failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      append(`Agent entry failed: ${errMsg(err)}`);
     } finally {
       setBusy(false);
     }
   }
+
+  async function handleAgentSend() {
+    if (!agentMessage.trim()) return;
+    setBusy(true);
+    try {
+      const reply = await runAgentServerFn({
+        data: { message: agentMessage.trim() },
+      });
+      append(`Agent: ${reply}`);
+      setAgentMessage("");
+    } catch (err) {
+      append(`Agent failed: ${errMsg(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputCls =
+    "w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200";
+  const btnPrimary =
+    "rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40";
+  const btnAgent =
+    "rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-40";
+  const btnGhost =
+    "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10 text-gray-900">
@@ -147,12 +232,11 @@ function TestPage() {
             Trackx Test Page
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Test authentication and tracker creation flows.
+            Auth + trackers + entries, direct vs agent.
           </p>
         </div>
 
         <div className="space-y-6">
-          {/* Authentication */}
           <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="mb-4">
               <h2 className="text-base font-semibold">Authentication</h2>
@@ -173,7 +257,7 @@ function TestPage() {
                 <button
                   onClick={handleLogout}
                   disabled={busy}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={btnGhost}
                 >
                   Log out
                 </button>
@@ -184,12 +268,11 @@ function TestPage() {
                 disabled={busy}
                 className="rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {busy ? "Logging in..." : "Log in as test user"}
+                {busy ? "Working..." : "Log in as test user"}
               </button>
             )}
           </section>
 
-          {/* Tracker creation */}
           <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="mb-4">
               <h2 className="text-base font-semibold">Create Tracker</h2>
@@ -198,40 +281,163 @@ function TestPage() {
               </p>
             </div>
 
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter tracker name..."
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-            />
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Tracker name
+                </label>
+                <input
+                  value={trackerName}
+                  onChange={(e) => setTrackerName(e.target.value)}
+                  placeholder="e.g. Mood, Workout..."
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Fields <span className="font-normal text-gray-400">(comma separated)</span>
+                </label>
+                <input
+                  value={fieldsInput}
+                  onChange={(e) => setFieldsInput(e.target.value)}
+                  placeholder="mood, energy"
+                  className={inputCls}
+                />
+              </div>
+            </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
-                onClick={handleDirectAdd}
-                disabled={busy || !user || !name.trim()}
-                className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={handleDirectTracker}
+                disabled={busy || !user || !trackerName.trim()}
+                className={btnPrimary}
               >
                 Direct
               </button>
-
               <button
-                onClick={handleAgentAdd}
-                disabled={busy || !user || !name.trim()}
-                className="rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={handleAgentTracker}
+                disabled={busy || !user || !trackerName.trim()}
+                className={btnAgent}
               >
-                Via Agent
+                Via agent
               </button>
             </div>
 
-            {!user && (
-              <p className="mt-3 text-xs text-amber-600">
-                Log in first to create a tracker.
+            {lastTracker ? (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                <div className="font-medium text-emerald-900">
+                  {lastTracker.name}{" "}
+                  <span className="font-normal text-emerald-700">
+                    (id {lastTracker.id})
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-emerald-800">
+                  {lastTracker.fields.length
+                    ? lastTracker.fields
+                        .map((f) => `${f.name} (${f.id})`)
+                        .join(", ")
+                    : "No fields"}
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-gray-400">
+                {user ? "No tracker created yet." : "Log in first to create a tracker."}
               </p>
             )}
           </section>
 
-          {/* Log */}
-          <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-base font-semibold">Log Entry</h2>
+              <p className="text-sm text-gray-500">
+                Write a value to a tracker field. Ids auto-fill from the last
+                created tracker.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Tracker id
+                </label>
+                <input
+                  value={entryTrackerId}
+                  onChange={(e) => setEntryTrackerId(e.target.value)}
+                  placeholder="tracker UUID"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Field id
+                </label>
+                <input
+                  value={entryFieldId}
+                  onChange={(e) => setEntryFieldId(e.target.value)}
+                  placeholder="field UUID"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600">
+                Value
+              </label>
+              <input
+                value={entryValue}
+                onChange={(e) => setEntryValue(e.target.value)}
+                placeholder="good"
+                className={inputCls}
+              />
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={handleDirectEntry}
+                disabled={busy || !user || !entryTrackerId || !entryFieldId}
+                className={btnPrimary}
+              >
+                Direct
+              </button>
+              <button
+                onClick={handleAgentEntry}
+                disabled={busy || !user || !entryTrackerId}
+                className={btnAgent}
+              >
+                Via agent
+              </button>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-base font-semibold">Agent</h2>
+              <p className="text-sm text-gray-500">
+                Send a freeform message to the TrackX assistant.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                value={agentMessage}
+                onChange={(e) => setAgentMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAgentSend();
+                }}
+                placeholder="Ask the agent anything..."
+                className={inputCls}
+              />
+              <button
+                onClick={handleAgentSend}
+                disabled={busy || !user || !agentMessage.trim()}
+                className="shrink-0 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Send
+              </button>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
               <div>
                 <h2 className="text-base font-semibold">Log</h2>

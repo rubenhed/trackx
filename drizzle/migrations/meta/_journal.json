@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1789302361604,
-      "tag": "0000_thin_living_lightning",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1789304388481,
-      "tag": "0001_jazzy_bloodaxe",
+      "when": 1790328186505,
+      "tag": "0000_flimsy_puppet_master",
       "breakpoints": true
     }
   ]

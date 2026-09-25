@@ -1,3 +1,40 @@
+CREATE TABLE `entries` (
+	`id` text PRIMARY KEY NOT NULL,
+	`tracker_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`logged_at` integer NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`tracker_id`,`user_id`) REFERENCES `trackers`(`id`,`user_id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `entry_values` (
+	`id` text PRIMARY KEY NOT NULL,
+	`entry_id` text NOT NULL,
+	`tracker_id` text NOT NULL,
+	`field_id` text NOT NULL,
+	`value_text` text,
+	FOREIGN KEY (`entry_id`) REFERENCES `entries`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`field_id`,`tracker_id`) REFERENCES `fields`(`id`,`tracker_id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `fields` (
+	`id` text PRIMARY KEY NOT NULL,
+	`tracker_id` text NOT NULL,
+	`name` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`tracker_id`) REFERENCES `trackers`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `fields_id_tracker_id_unique` ON `fields` (`id`,`tracker_id`);--> statement-breakpoint
+CREATE TABLE `trackers` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`name` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `trackers_id_user_id_unique` ON `trackers` (`id`,`user_id`);--> statement-breakpoint
 CREATE TABLE `account` (
 	`id` text PRIMARY KEY NOT NULL,
 	`account_id` text NOT NULL,
@@ -50,17 +87,4 @@ CREATE TABLE `verification` (
 	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);--> statement-breakpoint
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
-CREATE TABLE `__new_trackers` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`user_id` text NOT NULL,
-	`name` text NOT NULL,
-	`created_at` integer NOT NULL,
-	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-INSERT INTO `__new_trackers`("id", "user_id", "name", "created_at") SELECT "id", "user_id", "name", "created_at" FROM `trackers`;--> statement-breakpoint
-DROP TABLE `trackers`;--> statement-breakpoint
-ALTER TABLE `__new_trackers` RENAME TO `trackers`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;
+CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);
